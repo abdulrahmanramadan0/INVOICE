@@ -301,7 +301,7 @@ function eligibleDesigns(clientId,y,m,currency,ignoreInvoiceId){
     return d.clientId===clientId && t.y===y && t.m===m && d.currency===currency && (!u || u===ignoreInvoiceId); })
     .sort(function(a,b){return a.date<b.date?-1:(a.date>b.date?1:0);});
 }
-function itemsFromDesigns(ds){ return ds.map(function(d){ return {designId:d.id,title:d.title,description:d.description||'',date:d.date,price:d.price,imageId:d.imageId,slides:d.slides||0,slidePrice:d.slidePrice||0}; }); }
+function itemsFromDesigns(ds){ return ds.map(function(d){ return {designId:d.id,title:d.title,description:d.description||'',date:d.date,price:d.price,imageId:d.imageId,slides:d.slides||0,slidePrice:d.slidePrice||0,includes:d.includes||[]}; }); }
 function nextInvoiceNumber(y,m){ var n=S.settings.seq++; return S.settings.prefix+'-'+y+pad(m)+'-'+('00'+n).slice(-3); }
 function clientSnap(c){ return {name:c.name,contact:c.contact||'',email:c.email||'',phone:c.phone||''}; }
 function buildInvoice(clientId,y,m,currency,adj,notes,replaces,designIds){
@@ -417,7 +417,7 @@ function viewDashboard(){
   var stat=function(k,v,sub){return '<div class="card stat"><div class="k">'+k+'</div><div class="v">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>';};
   var noData=!S.clients.length&&!S.designs.length;
   return '<div class="page-head"><div><h1>لوحة التحكم</h1><p class="sub" style="margin:0">'+esc(monthLabel(y,m))+'</p></div><div class="row"><select id="dm" aria-label="الشهر" style="width:auto">'+monthOptions(m)+'</select><select id="dy" aria-label="السنة" style="width:auto">'+yearOptions(y)+'</select></div></div>'+
-  '<div class="row qa" style="margin-bottom:18px"><button class="btn gold" data-act="newDesign">+ إضافة تصميم</button><button class="btn" data-act="newClient">+ إضافة عميل</button><button class="btn" data-act="newInvoice">إنشاء فاتورة</button><a class="btn ghost" href="'+esc(portfolioUrl())+'" target="_blank" rel="noopener noreferrer">عرض معرض الأعمال ↗</a></div>'+
+  '<div class="row qa" style="margin-bottom:18px"><button class="btn gold" data-act="newDesign">+ إضافة تصميم</button><button class="btn" data-act="newIdentity">+ هوية بصرية</button><button class="btn" data-act="newClient">+ إضافة عميل</button><button class="btn" data-act="newInvoice">إنشاء فاتورة</button><a class="btn ghost" href="'+esc(portfolioUrl())+'" target="_blank" rel="noopener noreferrer">عرض معرض الأعمال ↗</a></div>'+
   (noData?'<div class="notice">أهلاً بك. ابدأ بإضافة عميل، ثم سجّل أول تصميم سلّمته. جميع الأرقام هنا تُحسب من سجلاتك الفعلية فقط.</div>':'')+
   '<div class="grid g4"><div style="display:contents">'+stat('قيمة التصاميم المُسلَّمة هذا الشهر',multiMoney(rev),'حسب تاريخ التسليم')+stat('عدد التصاميم المُسلَّمة','<span class="num">'+mDesigns.length+'</span>')+stat('العملاء النشطون','<span class="num">'+active+'</span>')+stat('الفواتير غير المسدَّدة',multiMoney(unpaid),'المتبقي على الفواتير النهائية')+'</div></div>'+
   '<div class="grid g2" style="margin-top:14px"><div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">قيمة التصاميم الشهرية — '+y+'</h2><div class="tabs">'+tabs+'</div></div><svg class="chart" viewBox="0 0 '+VW+' 200" role="img" aria-label="رسم بياني للقيمة الشهرية">'+bars+'</svg><div class="muted" style="font-size:12px">المدفوعات المستلمة هذا الشهر: '+(Object.keys(recvd).length?Object.keys(recvd).map(function(c){return fmt(recvd[c],c);}).join(' ، '):'لا شيء')+'</div></div>'+
@@ -447,11 +447,11 @@ function viewClient(id){
   var total=byCurrency(S.designs.filter(function(d){return d.clientId===id;}).map(function(d){return {c:d.currency,a:d.price};}));
   var g=keys.map(function(k){ var arr=groups[k]; var t=byCurrency(arr.map(function(d){return {c:d.currency,a:d.price};})); var p=k.split('-');
     return '<div class="group-h"><h2 style="margin:0">'+esc(monthLabel(+p[0],+p[1]))+'</h2><span class="muted">'+arr.length+' تصميم · '+Object.keys(t).map(function(cu){return esc(fmt(t[cu],cu));}).join(' ، ')+'</span></div><div class="table-wrap"><table><tbody>'+arr.map(function(d){return designRow(d,used);}).join('')+'</tbody></table></div>'; }).join('');
-  return '<div class="page-head"><div><a class="muted" href="#/clients">← العملاء</a><h1>'+esc(c.name)+(c.archived?' <span class="badge">مؤرشف</span>':'')+'</h1><p class="sub" style="margin:0">'+esc([c.contact,c.email,c.phone].filter(Boolean).join(' · ')||'لا توجد بيانات تواصل')+' · منذ '+esc(fmtDate(c.createdAt.slice(0,10)))+'</p></div><div class="row"><button class="btn gold" data-act="newDesign" data-id="'+c.id+'">+ تصميم</button><button class="btn" data-act="newInvoice" data-id="'+c.id+'">فاتورة</button><button class="btn ghost" data-act="editClient" data-id="'+c.id+'">تعديل</button></div></div>'+
+  return '<div class="page-head"><div><a class="muted" href="#/clients">← العملاء</a><h1>'+esc(c.name)+(c.archived?' <span class="badge">مؤرشف</span>':'')+'</h1><p class="sub" style="margin:0">'+esc([c.contact,c.email,c.phone].filter(Boolean).join(' · ')||'لا توجد بيانات تواصل')+' · منذ '+esc(fmtDate(c.createdAt.slice(0,10)))+'</p></div><div class="row"><button class="btn gold" data-act="newDesign" data-id="'+c.id+'">+ تصميم</button><button class="btn" data-act="newIdentity" data-id="'+c.id+'">+ هوية بصرية</button><button class="btn" data-act="newInvoice" data-id="'+c.id+'">فاتورة</button><button class="btn ghost" data-act="editClient" data-id="'+c.id+'">تعديل</button></div></div>'+
   '<div class="grid g4"><div class="card stat"><div class="k">السعر الافتراضي</div><div class="v">'+esc(fmt(c.defaultPrice,c.currency))+'</div></div><div class="card stat"><div class="k">إجمالي قيمة الأعمال</div><div class="v">'+multiMoney(total)+'</div></div><div class="card stat"><div class="k">المتبقي (فواتير نهائية)</div><div class="v">'+multiMoney(out)+'</div></div><div class="card stat"><div class="k">عدد التصاميم</div><div class="v"><span class="num">'+S.designs.filter(function(d){return d.clientId===id;}).length+'</span></div></div></div>'+
   (c.notes?'<div class="notice" style="margin-top:14px">'+esc(c.notes)+'</div>':'')+
   '<div class="row" style="margin:18px 0 4px"><select id="cpy" style="width:auto">'+yearOptions(f.y,true)+'</select><select id="cpm" style="width:auto">'+monthOptions(f.m,true)+'</select><select id="cpc" style="width:auto">'+catOptions(f.cat,true)+'</select><select id="cpi" style="width:auto"><option value="">كل الحالات</option><option value="invoiced"'+(f.inv==='invoiced'?' selected':'')+'>مُفوتر</option><option value="open"'+(f.inv==='open'?' selected':'')+'>غير مُفوتر</option></select></div>'+
-  (keys.length?g:emptyBox('لا توجد تصاميم','لم يُسجَّل أي تصميم يطابق الفلاتر.','<button class="btn gold" data-act="newDesign" data-id="'+c.id+'">+ تصميم</button>'))+
+  (keys.length?g:emptyBox('لا توجد تصاميم','لم يُسجَّل أي تصميم يطابق الفلاتر.','<button class="btn gold" data-act="newDesign" data-id="'+c.id+'">+ تصميم</button><button class="btn" data-act="newIdentity" data-id="'+c.id+'">+ هوية بصرية</button>'))+
   '<div class="group-h"><h2 style="margin:0">الفواتير</h2></div>'+(invs.length?'<div class="table-wrap"><table><tbody>'+invs.map(function(i){var inf=invInfo(i);return '<tr><td><a href="#/invoices/'+i.id+'"><b>'+esc(i.number)+'</b></a></td><td>'+esc(monthLabel(i.year,i.month))+'</td><td class="num">'+esc(fmt(i.total,i.currency))+'</td><td class="num">متبقٍ: '+esc(fmt(inf.remaining,i.currency))+'</td><td><span class="badge '+inf.cls+'">'+inf.label+'</span></td></tr>';}).join('')+'</tbody></table></div>':'<p class="muted">لا توجد فواتير.</p>')+
   '<div class="group-h"><h2 style="margin:0">سجل المدفوعات</h2></div>'+(pays.length?'<div class="table-wrap"><table><tbody>'+pays.map(function(p){var i=invById(p.invoiceId);return '<tr><td>'+esc(fmtDate(p.date))+'</td><td><a href="#/invoices/'+i.id+'">'+esc(i.number)+'</a></td><td class="num">'+esc(fmt(p.amount,i.currency))+'</td><td>'+esc(p.method||'')+'</td></tr>';}).join('')+'</tbody></table></div>':'<p class="muted">لا توجد مدفوعات.</p>');
 }
@@ -469,10 +469,10 @@ function viewDesigns(){
   var f=UI.df, list=filteredDesigns(), used=invoicedDesignIds();
   var tot=byCurrency(list.map(function(d){return {c:d.currency,a:d.price};}));
   var body;
-  if(!list.length) body=emptyBox(S.designs.length?'لا نتائج':'لا توجد تصاميم بعد','سجّل التصاميم التي سلّمتها لعملائك مع صورها وتاريخ التسليم والسعر.','<button class="btn gold" data-act="newDesign">+ إضافة تصميم</button>');
+  if(!list.length) body=emptyBox(S.designs.length?'لا نتائج':'لا توجد تصاميم بعد','سجّل التصاميم التي سلّمتها لعملائك مع صورها وتاريخ التسليم والسعر.','<button class="btn gold" data-act="newDesign">+ إضافة تصميم</button><button class="btn" data-act="newIdentity">+ هوية بصرية</button>');
   else if(UI.dview==='gallery') body='<div class="gallery">'+list.map(function(d){var c=clientById(d.clientId);var im=IMG[d.imageId];return '<div class="tile"><div class="img" data-act="zoom" data-id="'+d.imageId+'"><img src="'+(im?im.thumb:'')+'" alt="'+esc(d.title)+'" loading="lazy"></div><div class="meta"><div class="t">'+esc(d.title)+'</div><div class="muted" style="font-size:12px">'+esc(c?c.name:'—')+' · '+esc(fmtDate(d.date))+'</div><div class="row" style="justify-content:space-between"><b class="num">'+esc(fmt(d.price,d.currency))+'</b>'+(used[d.id]?'<span class="badge navy">مُفوتر</span>':'')+'</div><div class="row"><button class="btn ghost sm" data-act="editDesign" data-id="'+d.id+'">تعديل</button><button class="btn danger sm" data-act="delDesign" data-id="'+d.id+'">حذف</button></div></div></div>';}).join('')+'</div>';
   else body='<div class="table-wrap"><table><thead><tr><th></th><th>التصميم</th><th>تاريخ التسليم</th><th>السعر</th><th>الفوترة</th><th></th></tr></thead><tbody>'+list.map(function(d){return designRow(d,used);}).join('')+'</tbody></table></div>';
-  return '<div class="page-head"><div><h1>التصاميم</h1><p class="sub" style="margin:0">'+list.length+' تصميم · '+(Object.keys(tot).map(function(c){return esc(fmt(tot[c],c));}).join(' ، ')||'—')+'</p></div><div class="row"><div class="seg"><button class="'+(UI.dview==='gallery'?'on':'')+'" data-act="dview" data-id="gallery">معرض</button><button class="'+(UI.dview==='table'?'on':'')+'" data-act="dview" data-id="table">جدول</button></div><button class="btn gold" data-act="newDesign">+ إضافة تصميم</button></div></div>'+
+  return '<div class="page-head"><div><h1>التصاميم</h1><p class="sub" style="margin:0">'+list.length+' تصميم · '+(Object.keys(tot).map(function(c){return esc(fmt(tot[c],c));}).join(' ، ')||'—')+'</p></div><div class="row"><div class="seg"><button class="'+(UI.dview==='gallery'?'on':'')+'" data-act="dview" data-id="gallery">معرض</button><button class="'+(UI.dview==='table'?'on':'')+'" data-act="dview" data-id="table">جدول</button></div><button class="btn gold" data-act="newDesign">+ إضافة تصميم</button><button class="btn" data-act="newIdentity">+ هوية بصرية</button></div></div>'+
   '<div class="row" style="margin-bottom:16px"><input id="dq" placeholder="بحث" value="'+esc(f.q)+'" style="max-width:220px"><select id="dfc" style="width:auto">'+clientOptions(f.client,true)+'</select><select id="dfy" style="width:auto">'+yearOptions(f.y,true)+'</select><select id="dfm" style="width:auto">'+monthOptions(f.m,true)+'</select><select id="dfk" style="width:auto">'+catOptions(f.cat,true)+'</select></div>'+body;
 }
 
@@ -488,7 +488,7 @@ function viewInvoices(){
 function sheetHTML(inv){
   var s=S.settings, snap=inv.clientSnap, inf=invInfo(inv), cur=inv.currency;
   var stamp={draft:['مسودة','#14213D'],unpaid:['غير مدفوعة','#B3363F'],partial:['مدفوعة جزئياً','#B7791F'],paid:['مدفوعة','#1F8A5B'],void:['ملغاة','#B3363F']}[inf.status];
-  var rows=inv.items.map(function(it,idx){ var im=IMG[it.imageId]; return '<tr><td style="width:8mm;color:#8A90A0">'+(idx+1)+'</td><td style="width:36mm">'+(im?'<img src="'+im.full+'" alt="">':'')+'</td><td><div class="t">'+esc(it.title)+'</div>'+(it.slides?'<div class="d">'+it.slides+' شريحة × '+esc(fmt(it.slidePrice,cur))+'</div>':'')+(it.description?'<div class="d">'+esc(it.description)+'</div>':'')+'</td><td style="width:36mm;white-space:nowrap">'+esc(fmtDate(it.date))+'</td><td style="width:28mm;text-align:end" class="num">'+esc(fmt(it.price,cur))+'</td></tr>'; }).join('');
+  var rows=inv.items.map(function(it,idx){ var im=IMG[it.imageId]; return '<tr><td style="width:8mm;color:#8A90A0">'+(idx+1)+'</td><td style="width:36mm">'+(im?'<img src="'+im.full+'" alt="">':'')+'</td><td><div class="t">'+esc(it.title)+'</div>'+(it.includes&&it.includes.length?'<div class="d">يشمل: '+it.includes.map(esc).join(' · ')+'</div>':'')+(it.slides?'<div class="d">'+it.slides+' شريحة × '+esc(fmt(it.slidePrice,cur))+'</div>':'')+(it.description?'<div class="d">'+esc(it.description)+'</div>':'')+'</td><td style="width:36mm;white-space:nowrap">'+esc(fmtDate(it.date))+'</td><td style="width:28mm;text-align:end" class="num">'+esc(fmt(it.price,cur))+'</td></tr>'; }).join('');
   var contact=[snap.contact,snap.email,snap.phone].filter(Boolean).map(esc).join(' · ');
   var t=invoiceTotals(inv.items.map(function(i){return i.price;}),inv.adjustment);
   var paidRows=(inf.status==='partial'||inf.status==='paid')?'<div class="r"><span>المدفوع</span><b class="num">'+esc(fmt(inf.paid,cur))+'</b></div><div class="r"><span>المتبقي</span><b class="num">'+esc(fmt(inf.remaining,cur))+'</b></div>':'';
@@ -559,19 +559,21 @@ function openClient(id){
     save(); render(); toast('تم الحفظ'); }});
 }
 
-function openDesign(id,presetClient){
+function openDesign(id,presetClient,kind){
   if(!S.clients.filter(function(c){return !c.archived;}).length){ toast('أضف عميلاً أولاً',true); openClient(); return; }
-  var CAR=/كاروسيل|كروسيل|carousel/i;
+  var CAR=/كاروسيل|كروسيل|carousel/i; var IDR=/هوية|هويه|identity|branding/i;
+  var IDDEF=['شعار رئيسي','شعار ثانوي / أيقونة','لوحة الألوان','الخطوط','دليل استخدام الهوية','تطبيقات الهوية (بطاقة أعمال، ورق رسمي، ظرف)'];
   var d=id?designById(id):null;
   var cid=d?d.clientId:(presetClient||(UI.df.client)||S.clients.filter(function(c){return !c.archived;})[0].id);
-  var c0=clientById(cid); var cur0=d?d.currency:c0.currency; var cat0=d?d.category||'':'';
+  var c0=clientById(cid); var cur0=d?d.currency:c0.currency; var cat0=d?d.category||'':(kind==='identity'?'هوية بصرية':'');
   var price0=d?d.price:defaultPriceFor(cid,cat0,cur0);
   var html='<div class="field"><label>العميل *</label><select name="client" id="fclient">'+clientOptions(cid,false,true)+'</select></div>'+
    '<div class="field"><label>اسم التصميم *</label><input name="title" required value="'+esc(d?d.title:'')+'"></div>'+
    '<div class="field"><label>صورة التصميم (JPG / PNG / WebP) '+(d?'— اتركه فارغاً للإبقاء على الصورة الحالية':'*')+'</label><input type="file" name="image" id="fimg" accept="image/jpeg,image/png,image/webp">'+(d&&IMG[d.imageId]?'<img src="'+IMG[d.imageId].thumb+'" alt="" style="margin-top:8px;max-height:120px;border-radius:8px">':'')+'<img id="fprev" alt="" style="display:none;margin-top:8px;max-height:140px;border-radius:8px"></div>'+
-   '<div class="two"><div class="field"><label>تاريخ التسليم *</label><input type="date" name="date" required value="'+(d?d.date:today())+'"></div><div class="field"><label>الفئة</label><input name="category" list="catlist" id="fcat" value="'+esc(cat0)+'"><datalist id="catlist">'+categoryList().map(function(x){return '<option value="'+esc(x)+'">';}).join('')+'</datalist></div></div>'+
+   '<div class="two"><div class="field"><label>تاريخ التسليم *</label><input type="date" name="date" required value="'+(d?d.date:today())+'"></div><div class="field"><label>الفئة</label><input name="category" list="catlist" id="fcat" value="'+esc(cat0)+'"><datalist id="catlist">'+(categoryList().indexOf('هوية بصرية')<0?categoryList().concat(['هوية بصرية']):categoryList()).map(function(x){return '<option value="'+esc(x)+'">';}).join('')+'</datalist></div></div>'+
    '<div class="two"><div class="field"><label>العملة</label><select name="currency" id="fcur">'+currencyOptions(cur0)+'</select></div><div class="field"><label>السعر *</label><input type="number" name="price" id="fprice" step="any" min="0" required value="'+fromMinor(price0,cur0)+'"></div></div>'+
    '<div class="two" id="fslides" style="display:none"><div class="field"><label>سعر الشريحة الواحدة</label><input type="number" name="slidePrice" id="fsp" step="any" min="0" value="'+(d&&d.slides?fromMinor(d.slidePrice,cur0):(d?fromMinor(price0,cur0):0))+'"></div><div class="field"><label>عدد الشرائح</label><input type="number" name="slideCount" id="fsc" step="1" min="1" value="'+(d&&d.slides?d.slides:1)+'"></div></div>'+
+   '<div class="field" id="fincl" style="display:none"><label>ما تشمله الهوية البصرية (بند في كل سطر)</label><textarea name="includes" id="finc" rows="6">'+esc((d&&d.includes?d.includes:IDDEF).join('\n'))+'</textarea><div class="muted" style="font-size:12px;margin-top:4px">السعر أعلاه هو سعر الهوية كاملة، والبنود تظهر تحت اسمها في الفاتورة.</div></div>'+
    '<div class="field"><label>وصف</label><textarea name="description">'+esc(d?d.description||'':'')+'</textarea></div><div class="field"><label>ملاحظات داخلية</label><input name="notes" value="'+esc(d?d.notes||'':'')+'"></div>'+
    (d&&invoicedDesignIds()[d.id]?'<div class="notice">هذا التصميم موجود في فاتورة؛ تعديل سعره هنا لا يغيّر الفاتورة.</div>':'');
   var pending=null;
@@ -579,7 +581,7 @@ function openDesign(id,presetClient){
     var dirty=!!d; var dirtyS=!!d; var price=$('fprice');
     function isCar(){ return CAR.test($('fcat').value); }
     function calc(){ var cu=$('fcur').value; var per=Number($('fsp').value)||0; var n=Math.max(1,Math.floor(Number($('fsc').value)||1)); price.value=fromMinor(toMinor(per,cu)*n,cu); }
-    function sync(){ var car=isCar(); $('fslides').style.display=car?'':'none'; price.readOnly=car; if(car) calc(); }
+    function sync(){ $('fincl').style.display=IDR.test($('fcat').value)?'':'none'; var car=isCar(); $('fslides').style.display=car?'':'none'; price.readOnly=car; if(car) calc(); }
     price.addEventListener('input',function(){dirty=true;});
     $('fsp').addEventListener('input',function(){ dirtyS=true; calc(); });
     $('fsc').addEventListener('input',calc);
@@ -603,6 +605,7 @@ function openDesign(id,presetClient){
     var rec=d||{id:uid(),createdAt:new Date().toISOString()};
     rec.clientId=fd.get('client'); rec.title=title; rec.date=date; rec.category=(fd.get('category')||'').trim(); rec.currency=cur; rec.price=toMinor(pv,cur);
     if(CAR.test(rec.category)){ var sc=Math.floor(Number(fd.get('slideCount'))); var sp=Number(fd.get('slidePrice')); if(!(sc>=1)) throw new Error('عدد الشرائح غير صالح'); if(fd.get('slidePrice')===''||!isFinite(sp)||sp<0) throw new Error('سعر الشريحة غير صالح'); rec.slides=sc; rec.slidePrice=toMinor(sp,cur); rec.price=rec.slidePrice*sc; } else { delete rec.slides; delete rec.slidePrice; }
+    if(IDR.test(rec.category)) rec.includes=(fd.get('includes')||'').split('\n').map(function(x){return x.trim();}).filter(Boolean); else delete rec.includes;
     rec.description=(fd.get('description')||'').trim(); rec.notes=(fd.get('notes')||'').trim();
     var old=d?d.imageId:null;
     if(pending){ var nid=uid(); putImage(nid,pending); rec.imageId=nid; }
@@ -683,12 +686,12 @@ function openPayment(id){
 var ACTIONS={
   collapse:function(){ UI.sideCollapsed=!UI.sideCollapsed; render(); },
   menu:function(){ $('sidebar').classList.toggle('open'); },
-  quick:function(){ modal({title:'إضافة جديد',hideSubmit:true,html:'<div class="grid" style="gap:10px"><button type="button" class="btn gold" data-act="qDesign">+ تصميم جديد</button><button type="button" class="btn" data-act="qClient">+ عميل جديد</button><button type="button" class="btn" data-act="qInvoice">إنشاء فاتورة</button></div>'}); },
-  qDesign:function(){ closeModal(); openDesign(); }, qClient:function(){ closeModal(); openClient(); }, qInvoice:function(){ closeModal(); openInvoiceCreate(); },
+  quick:function(){ modal({title:'إضافة جديد',hideSubmit:true,html:'<div class="grid" style="gap:10px"><button type="button" class="btn gold" data-act="qDesign">+ تصميم جديد</button><button type="button" class="btn" data-act="qIdentity">+ هوية بصرية</button><button type="button" class="btn" data-act="qClient">+ عميل جديد</button><button type="button" class="btn" data-act="qInvoice">إنشاء فاتورة</button></div>'}); },
+  qDesign:function(){ closeModal(); openDesign(); }, qIdentity:function(){ closeModal(); openDesign(null,null,'identity'); }, qClient:function(){ closeModal(); openClient(); }, qInvoice:function(){ closeModal(); openInvoiceCreate(); },
   newClient:function(){ openClient(); }, editClient:function(id){ openClient(id); },
   archiveClient:function(id){ var c=clientById(id); c.archived=!c.archived; save(); render(); toast(c.archived?'تمت الأرشفة':'تمت الاستعادة'); },
   cArch:function(v){ UI.cf.archived=v==='1'; render(); },
-  newDesign:function(id){ openDesign(null,id); }, editDesign:function(id){ openDesign(id); },
+  newDesign:function(id){ openDesign(null,id); }, newIdentity:function(id){ openDesign(null,id,'identity'); }, editDesign:function(id){ openDesign(id); },
   delDesign:function(id){ var d=designById(id); var inI=invoicedDesignIds()[id];
     confirmBox('حذف التصميم «'+d.title+'»؟'+(inI?' هو موجود في فاتورة، وستبقى الفاتورة كما هي.':'')+' لا يمكن التراجع.','حذف',true).then(function(ok){ if(!ok) return; S.designs=S.designs.filter(function(x){return x.id!==id;}); dropImageIfUnused(d.imageId); save(); render(); toast('تم الحذف'); }); },
   dview:function(v){ UI.dview=v; render(); },
