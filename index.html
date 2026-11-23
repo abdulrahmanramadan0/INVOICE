@@ -278,7 +278,7 @@ function idbAll(store){ return new Promise(function(res,rej){ var out={}; var q=
 function idbPut(store,key,val){ return new Promise(function(res,rej){ var tx=idb.transaction(store,'readwrite'); tx.objectStore(store).put(val,key); tx.oncomplete=function(){res();}; tx.onerror=function(){rej(tx.error);}; }); }
 function idbDel(store,key){ return new Promise(function(res,rej){ var tx=idb.transaction(store,'readwrite'); tx.objectStore(store).delete(key); tx.oncomplete=function(){res();}; tx.onerror=function(){rej(tx.error);}; }); }
 var saveTimer=null;
-function save(){ if(memoryOnly) return; idbPut('kv','state',JSON.parse(JSON.stringify(S))).catch(function(){ toast('تعذّر الحفظ في المتصفح',true); }); }
+function save(){ try{ localStorage.setItem('av-mini-backup',JSON.stringify(S)); }catch(e){} if(memoryOnly) return; idbPut('kv','state',JSON.parse(JSON.stringify(S))).catch(function(){ toast('تعذّر الحفظ في المتصفح',true); }); }
 function putImage(id,obj){ IMG[id]=obj; if(!memoryOnly) idbPut('img',id,obj).catch(function(){ toast('تعذّر حفظ الصورة',true); }); }
 function dropImageIfUnused(id){ if(!id) return; var used=S.designs.some(function(d){return d.imageId===id;})||S.invoices.some(function(i){return i.items.some(function(it){return it.imageId===id;});}); if(!used){ delete IMG[id]; if(!memoryOnly) idbDel('img',id); } }
 
@@ -298,7 +298,7 @@ function invoicedDesignIds(){ var set={}; S.invoices.forEach(function(i){ if(i.s
 function eligibleDesigns(clientId,y,m,currency,ignoreInvoiceId){
   var used=invoicedDesignIds();
   return S.designs.filter(function(d){ var t=ym(d.date); var u=used[d.id];
-    return d.clientId===clientId && t.y===y && t.m===m && d.currency===currency && (!u || u===ignoreInvoiceId); })
+    return (!clientId||d.clientId===clientId) && (!y||t.y===y) && (!m||t.m===m) && (!currency||d.currency===currency) && (!u || u===ignoreInvoiceId); })
     .sort(function(a,b){return a.date<b.date?-1:(a.date>b.date?1:0);});
 }
 function itemsFromDesigns(ds){ return ds.map(function(d){ return {designId:d.id,title:d.title,description:d.description||'',date:d.date,price:d.price,imageId:d.imageId,slides:d.slides||0,slidePrice:d.slidePrice||0,includes:d.includes||[]}; }); }
@@ -307,7 +307,8 @@ function clientSnap(c){ return {name:c.name,contact:c.contact||'',email:c.email|
 function buildInvoice(clientId,y,m,currency,adj,notes,replaces,designIds){
   var c=clientById(clientId); var ds=eligibleDesigns(clientId,y,m,currency);
   if(designIds) ds=ds.filter(function(d){return designIds.indexOf(d.id)>=0;});
-  if(!ds.length) throw new Error('لا توجد تصاميم غير مفوترة لهذا العميل في '+monthLabel(y,m)+' بعملة '+currency);
+  if(!ds.length) throw new Error('لا توجد تصاميم أو هويات غير مفوترة لهذا العميل بهذه المواصفات');
+  if(!y||!m){ var lastD=ds.map(function(d){return d.date;}).sort().pop(); var q=ym(lastD); y=q.y; m=q.m; }
   var items=itemsFromDesigns(ds); var t=invoiceTotals(items.map(function(i){return i.price;}),adj);
   return {id:uid(),number:nextInvoiceNumber(y,m),state:'draft',clientId:clientId,year:y,month:m,issueDate:today(),currency:currency,items:items,
     adjustment:adj,subtotal:t.subtotal,total:t.total,notes:notes||S.settings.notes||'',payInstr:S.settings.payInstr||'',closing:S.settings.closing||'',
@@ -416,7 +417,8 @@ function viewDashboard(){
   var tabs=curList.map(function(c){return '<button class="'+(c===cc?'on':'')+'" data-act="dcur" data-id="'+c+'">'+c+'</button>';}).join('');
   var stat=function(k,v,sub){return '<div class="card stat"><div class="k">'+k+'</div><div class="v">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>';};
   var noData=!S.clients.length&&!S.designs.length;
-  return '<div class="page-head"><div><h1>لوحة التحكم</h1><p class="sub" style="margin:0">'+esc(monthLabel(y,m))+'</p></div><div class="row"><select id="dm" aria-label="الشهر" style="width:auto">'+monthOptions(m)+'</select><select id="dy" aria-label="السنة" style="width:auto">'+yearOptions(y)+'</select></div></div>'+
+  var warnEmpty=noData?'<div class="notice">لا توجد بيانات في هذه النسخة. إن كنت أضفت بيانات سابقاً فافتح الملف من نفس المكان/الرابط/المتصفح الذي استخدمته سابقاً (التخزين مرتبط بالمتصفح والمسار)، أو استورد نسخة احتياطية من الإعدادات.</div>':'';
+  return warnEmpty+'<div class="page-head"><div><h1>لوحة التحكم</h1><p class="sub" style="margin:0">'+esc(monthLabel(y,m))+'</p></div><div class="row"><select id="dm" aria-label="الشهر" style="width:auto">'+monthOptions(m)+'</select><select id="dy" aria-label="السنة" style="width:auto">'+yearOptions(y)+'</select></div></div>'+
   '<div class="row qa" style="margin-bottom:18px"><button class="btn gold" data-act="newDesign">+ إضافة تصميم</button><button class="btn" data-act="newIdentity">+ هوية بصرية</button><button class="btn" data-act="newClient">+ إضافة عميل</button><button class="btn" data-act="newInvoice">إنشاء فاتورة</button><a class="btn ghost" href="'+esc(portfolioUrl())+'" target="_blank" rel="noopener noreferrer">عرض معرض الأعمال ↗</a></div>'+
   (noData?'<div class="notice">أهلاً بك. ابدأ بإضافة عميل، ثم سجّل أول تصميم سلّمته. جميع الأرقام هنا تُحسب من سجلاتك الفعلية فقط.</div>':'')+
   '<div class="grid g4"><div style="display:contents">'+stat('قيمة التصاميم المُسلَّمة هذا الشهر',multiMoney(rev),'حسب تاريخ التسليم')+stat('عدد التصاميم المُسلَّمة','<span class="num">'+mDesigns.length+'</span>')+stat('العملاء النشطون','<span class="num">'+active+'</span>')+stat('الفواتير غير المسدَّدة',multiMoney(unpaid),'المتبقي على الفواتير النهائية')+'</div></div>'+
@@ -617,10 +619,10 @@ function openDesign(id,presetClient,kind){
 function designPickList(ds,checked,cur){
   if(!ds.length) return '<p class="muted" style="margin:0">لا توجد تصاميم غير مفوترة بهذه المواصفات.</p>';
   return '<div class="row" style="margin-bottom:8px;gap:8px"><button type="button" class="btn ghost sm" data-pick="all">تحديد الكل</button><button type="button" class="btn ghost sm" data-pick="none">إلغاء التحديد</button></div><div style="border:1px solid var(--line);border-radius:10px;max-height:260px;overflow:auto">'+ds.map(function(d){
-    var im=IMG[d.imageId]; return '<label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer"><input type="checkbox" name="d" value="'+d.id+'"'+(checked(d)?' checked':'')+' data-price="'+d.price+'" style="width:auto;flex:0 0 auto">'+(im?'<img src="'+im.thumb+'" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex:0 0 40px">':'')+'<span style="flex:1;min-width:0"><b>'+esc(d.title)+'</b><span class="muted" style="display:block;font-size:12px">'+esc(fmtDate(d.date))+(d.slides?' · '+d.slides+' شريحة × '+esc(fmt(d.slidePrice,cur)):'')+'</span></span><span class="num">'+esc(fmt(d.price,cur))+'</span></label>'; }).join('')+'</div>';
+    var im=IMG[d.imageId]; return '<label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer"><input type="checkbox" name="d" value="'+d.id+'"'+(checked(d)?' checked':'')+' data-price="'+d.price+'" style="width:auto;flex:0 0 auto">'+(im?'<img src="'+im.thumb+'" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex:0 0 40px">':'')+'<span style="flex:1;min-width:0"><b>'+esc(d.title)+(d.includes&&d.includes.length?' <span class="badge">هوية بصرية</span>':'')+'</b><span class="muted" style="display:block;font-size:12px">'+esc(fmtDate(d.date))+' · '+esc((clientById(d.clientId)||{}).name||'')+(d.slides?' · '+d.slides+' شريحة × '+esc(fmt(d.slidePrice,d.currency)):'')+'</span></span><span class="num">'+esc(fmt(d.price,d.currency))+'</span></label>'; }).join('')+'</div>';
 }
 function wirePick(box,out,cur){
-  function upd(){ var cs=[].slice.call(box.querySelectorAll('input[name=d]:checked')); out.textContent=cs.length?('تم اختيار '+cs.length+' تصميم بإجمالي '+fmt(sum(cs.map(function(c){return +c.dataset.price;})),cur)):'لم يتم اختيار أي تصميم'; }
+  function upd(){ var cs=[].slice.call(box.querySelectorAll('input[name=d]:checked')); out.textContent=cs.length?('تم اختيار '+cs.length+' عمل'+(cur?' بإجمالي '+fmt(sum(cs.map(function(c){return +c.dataset.price;})),cur):'')):'لم يتم اختيار أي تصميم'; }
   box.onchange=upd;
   box.onclick=function(e){ var b=e.target.closest('[data-pick]'); if(!b) return; var on=b.dataset.pick==='all'; [].slice.call(box.querySelectorAll('input[name=d]')).forEach(function(c){c.checked=on;}); upd(); };
   upd();
@@ -629,19 +631,26 @@ function wirePick(box,out,cur){
 function openInvoiceCreate(presetClient){
   var act=S.clients.filter(function(c){return !c.archived;});
   if(!act.length){ toast('أضف عميلاً أولاً',true); return; }
-  var cid=presetClient||UI.df.client||act[0].id; var c0=clientById(cid);
-  var html='<div class="field"><label>العميل</label><select name="client" id="icl">'+clientOptions(cid,false,true)+'</select></div><div class="two"><div class="field"><label>الشهر</label><select name="month" id="imo">'+monthOptions(UI.dash.m)+'</select></div><div class="field"><label>السنة</label><select name="year" id="iyr">'+yearOptions(UI.dash.y)+'</select></div></div><div class="two"><div class="field"><label>العملة</label><select name="currency" id="icu">'+currencyOptions(c0.currency)+'</select></div><div class="field"><label>خصم (−) أو إضافة (+)</label><input name="adj" type="number" step="any" value="0"></div></div><div class="field"><label>ملاحظات</label><textarea name="notes">'+esc(S.settings.notes||'')+'</textarea></div><div class="field"><label>التصاميم المضافة للفاتورة</label><div id="ilist"></div></div><div class="notice" id="ipre"></div>';
+  var cid=presetClient||''; var c0=cid?clientById(cid):null;
+  var html='<div class="field"><label>العميل</label><select name="client" id="icl"><option value="">كل العملاء</option>'+clientOptions(cid,false,true)+'</select></div><div class="two"><div class="field"><label>الشهر</label><select name="month" id="imo"><option value="0">كل الأشهر</option>'+monthOptions(UI.dash.m)+'</select></div><div class="field"><label>السنة</label><select name="year" id="iyr"><option value="0">كل السنوات</option>'+yearOptions(UI.dash.y)+'</select></div></div><div class="two"><div class="field"><label>العملة</label><select name="currency" id="icu"><option value="">كل العملات</option>'+currencyOptions(c0?c0.currency:'')+'</select></div><div class="field"><label>خصم (−) أو إضافة (+)</label><input name="adj" type="number" step="any" value="0"></div></div><div class="field"><label>ملاحظات</label><textarea name="notes">'+esc(S.settings.notes||'')+'</textarea></div><div class="field"><label>التصاميم المضافة للفاتورة</label><div id="ilist"></div></div><div class="notice" id="ipre"></div>';
   modal({title:'فاتورة جديدة',submit:'إنشاء المسودة',html:html,onMount:function(){
     function pre(){ var cu=$('icu').value; var ds=eligibleDesigns($('icl').value,+$('iyr').value,+$('imo').value,cu);
-      $('ilist').innerHTML=designPickList(ds,function(){return true;},cu); wirePick($('ilist'),$('ipre'),cu); if(!ds.length) $('ipre').textContent='لا توجد تصاميم غير مفوترة بهذه المواصفات.'; }
-    $('icl').addEventListener('change',function(){ $('icu').value=clientById(this.value).currency; pre(); });
+      $('ilist').innerHTML=designPickList(ds,function(){return true;},cu); wirePick($('ilist'),$('ipre'),cu);
+      if(!ds.length){ var other=S.designs.filter(function(d){return (!$('icl').value||d.clientId===$('icl').value) && !invoicedDesignIds()[d.id];});
+        var curs={}; other.forEach(function(d){curs[d.currency]=(curs[d.currency]||0)+1;});
+        $('ipre').textContent=other.length?('لا توجد بنود بهذه العملة/التاريخ، لكن لهذا العميل '+other.length+' عمل غير مفوتر بعملات أخرى ('+Object.keys(curs).join('، ')+') أو بتواريخ أخرى — غيّر العملة أو اختر «كل الأشهر».'):'لا توجد تصاميم أو هويات غير مفوترة لهذا العميل.'; } }
+    $('icl').addEventListener('change',function(){ $('icu').value=this.value?clientById(this.value).currency:''; pre(); });
     ['imo','iyr','icu'].forEach(function(i){ $(i).addEventListener('change',pre); }); pre();
   },onSubmit:function(fd){
     var cur=fd.get('currency'); var adjN=Number(fd.get('adj')||0); if(!isFinite(adjN)) throw new Error('قيمة الخصم غير صالحة');
-    var adj=Math.round(adjN*Math.pow(10,CUR[cur].d));
-    var ids=fd.getAll('d'); if(!ids.length) throw new Error('اختر تصميماً واحداً على الأقل');
-    var inv=buildInvoice(fd.get('client'),+fd.get('year'),+fd.get('month'),cur,adj,(fd.get('notes')||'').trim(),null,ids);
-    S.invoices.push(inv); save(); location.hash='#/invoices/'+inv.id; toast('تم إنشاء المسودة'); }});
+    var ids=fd.getAll('d'); if(!ids.length) throw new Error('اختر عملاً واحداً على الأقل');
+    var groups={}; ids.forEach(function(id){ var d=designById(id); if(!d) return; var k=d.clientId+'|'+d.currency; (groups[k]=groups[k]||{c:d.clientId,cu:d.currency,ids:[]}).ids.push(id); });
+    var keys=Object.keys(groups); var made=[];
+    keys.forEach(function(k){ var g=groups[k]; var adj=(keys.length===1&&cur)?Math.round(adjN*Math.pow(10,CUR[g.cu].d)):0;
+      made.push(buildInvoice(g.c,+fd.get('year'),+fd.get('month'),g.cu,adj,(fd.get('notes')||'').trim(),null,g.ids)); });
+    made.forEach(function(inv){ S.invoices.push(inv); }); save();
+    location.hash=made.length===1?'#/invoices/'+made[0].id:'#/invoices';
+    toast(made.length===1?'تم إنشاء المسودة':'تم إنشاء '+made.length+' مسودات (واحدة لكل عميل/عملة)'); }});
 }
 
 function openInvoiceEdit(id){
@@ -764,7 +773,9 @@ function bind(){
   window.addEventListener('resize',function(){ clearTimeout(rt); rt=setTimeout(function(){ var m=isMobile(); if(m!==wasMob){ wasMob=m; render(); } else fitSheet(); },120); });
 }
 function init(){
+  try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}
   idbOpen().then(function(db){ idb=db; return Promise.all([idbGet('kv','state'),idbAll('img')]); }).then(function(r){
+    if(!r[0]){ try{ var lb=localStorage.getItem('av-mini-backup'); if(lb){ r[0]=JSON.parse(lb); } }catch(e){} }
     if(r[0]){ S=Object.assign(defaultState(),r[0]); S.settings=Object.assign(defaultState().settings,r[0].settings); delete S.settings.brandName; } IMG=r[1]||{};
   }).catch(function(){ memoryOnly=true; }).then(function(){ bind(); render(); });
 }
