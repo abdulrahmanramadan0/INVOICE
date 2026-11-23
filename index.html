@@ -540,7 +540,7 @@ function viewSettings(){
   '<div class="field"><label>ملاحظات افتراضية على الفاتورة</label><textarea name="notes">'+esc(s.notes)+'</textarea></div><div class="field"><label>تعليمات الدفع (اختياري)</label><textarea name="payInstr">'+esc(s.payInstr)+'</textarea></div><div class="field"><label>رسالة الختام</label><textarea name="closing">'+esc(s.closing)+'</textarea></div>'+
   '<p class="err" id="serr" hidden></p><button class="btn gold" type="submit">حفظ الإعدادات</button></form>'+
   '<div><div class="card"><h2>أسعار افتراضية حسب الفئة</h2><p class="muted" style="margin-top:0">تُملأ تلقائياً عند اختيار الفئة، ويمكن تعديل السعر لكل تصميم.</p>'+(cats?'<table><tbody>'+cats+'</tbody></table>':'<p class="muted">لا توجد فئات.</p>')+'<button class="btn" style="margin-top:12px" data-act="addCat">+ فئة جديدة</button></div>'+
-  '<div class="card" style="margin-top:14px"><h2>نسخة احتياطية</h2><div class="notice">بياناتك محفوظة داخل هذا المتصفح فقط. صدّر نسخة احتياطية بانتظام (تشمل الصور)، فمسح بيانات الموقع أو تغيير الجهاز يحذفها.</div><div class="row"><button class="btn" data-act="export">تصدير نسخة احتياطية</button><button class="btn ghost" data-act="import">استيراد نسخة</button></div><input type="file" id="impf" accept="application/json" hidden></div></div></div>';
+  '<div class="card" style="margin-top:14px"><h2>نسخة احتياطية</h2><div class="notice">بياناتك محفوظة داخل هذا المتصفح فقط. صدّر نسخة احتياطية بانتظام (تشمل الصور)، فمسح بيانات الموقع أو تغيير الجهاز يحذفها.</div><div class="row"><button class="btn" data-act="export">تصدير نسخة احتياطية</button><button class="btn ghost" data-act="import">استيراد نسخة</button><button class="btn ghost" data-act="pullOther">جلب البيانات من الرابط الآخر</button></div><div class="muted" style="font-size:12px;margin-top:8px">إذا كانت بياناتك محفوظة على الرابط القديم أو الجديد للموقع، افتح هذا التطبيق على الرابط الحالي واضغط الزر لنقلها (يفتح نافذة صغيرة على الرابط الآخر).</div><input type="file" id="impf" accept="application/json" hidden></div></div></div>';
 }
 
 /* ---------- Modals / actions ---------- */
@@ -731,6 +731,7 @@ var ACTIONS={
   delCat:function(i){ S.settings.categories.splice(+i,1); save(); render(); },
   export:function(){ var data={app:'abdulrahman-visuals',version:1,exportedAt:new Date().toISOString(),state:S,images:IMG};
     var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'})); a.download='av-backup-'+today()+'.json'; a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);},2000); },
+  pullOther:function(){ pullFromOther(); },
   import:function(){ var f=$('impf'); f.value=''; f.onchange=function(){ var file=f.files[0]; if(!file) return; var r=new FileReader(); r.onload=function(){ try{ var d=JSON.parse(r.result); if(d.app!=='abdulrahman-visuals'||!d.state) throw new Error('ملف غير صالح');
       confirmBox('سيتم استبدال كل البيانات الحالية بمحتوى النسخة الاحتياطية. متابعة؟','استيراد',true).then(function(ok){ if(!ok) return; S=Object.assign(defaultState(),d.state); S.settings=Object.assign(defaultState().settings,d.state.settings); delete S.settings.brandName; IMG={}; Object.keys(d.images||{}).forEach(function(k){putImage(k,d.images[k]);}); save(); render(); toast('تم الاستيراد'); });
     }catch(e){ toast(e.message||'تعذّر قراءة الملف',true); } }; r.readAsText(file); }; f.click(); }
@@ -772,12 +773,42 @@ function bind(){
   var wasMob=isMobile(), rt=null;
   window.addEventListener('resize',function(){ clearTimeout(rt); rt=setTimeout(function(){ var m=isMobile(); if(m!==wasMob){ wasMob=m; render(); } else fitSheet(); },120); });
 }
+/* ---------- Bridge between the two site addresses (old github.io <-> custom domain) ---------- */
+var BRIDGE_ORIGINS=['https://abdulrahmanramadan.me','https://abdulrahmanramadan0.github.io'];
+function otherOrigin(){ var me=location.origin; var o=BRIDGE_ORIGINS.filter(function(x){return x!==me;}); return BRIDGE_ORIGINS.indexOf(me)>=0?o[0]:null; }
+function pullFromOther(){
+  var other=otherOrigin();
+  if(!other){ toast('هذا الرابط غير مسجّل للنقل. افتح التطبيق من الرابط الرسمي أو من github.io',true); return; }
+  var url=other+location.pathname+'?bridge=1';
+  var win=window.open(url,'av-bridge','width=520,height=420');
+  if(!win){ toast('المتصفح منع النافذة المنبثقة، اسمح بها ثم أعد المحاولة',true); return; }
+  var done=false;
+  function onMsg(e){
+    if(e.origin!==other||e.source!==win||!e.data||e.data.type!=='av-bridge') return;
+    done=true; window.removeEventListener('message',onMsg);
+    var d=e.data.payload; try{ win.close(); }catch(x){}
+    if(!d||d.app!=='abdulrahman-visuals'||!d.state){ toast('لم تصل بيانات صالحة',true); return; }
+    var n=(d.state.clients||[]).length, dz=(d.state.designs||[]).length, iv=(d.state.invoices||[]).length;
+    confirmBox('وصلت بيانات من الرابط الآخر: '+n+' عميل، '+dz+' تصميم، '+iv+' فاتورة. سيتم استبدال بيانات هذا الرابط بها. متابعة؟','استبدال',true).then(function(ok){ if(!ok) return;
+      S=Object.assign(defaultState(),d.state); S.settings=Object.assign(defaultState().settings,d.state.settings); delete S.settings.brandName; IMG={};
+      Object.keys(d.images||{}).forEach(function(k){putImage(k,d.images[k]);}); save(); render(); toast('تم نقل البيانات'); });
+  }
+  window.addEventListener('message',onMsg);
+  setTimeout(function(){ if(!done){ window.removeEventListener('message',onMsg); toast('لم تصل أي بيانات. قد يكون الرابط الآخر يحوّل تلقائياً أو فارغاً',true); } },20000);
+}
+function bridgeRespond(){
+  var other=otherOrigin(); if(!other||!window.opener) return false;
+  document.body.innerHTML='<div style="font-family:sans-serif;direction:rtl;padding:30px;text-align:center">جارٍ إرسال البيانات…</div>';
+  try{ window.opener.postMessage({type:'av-bridge',payload:{app:'abdulrahman-visuals',version:1,exportedAt:new Date().toISOString(),state:S,images:IMG}},other); }catch(e){}
+  setTimeout(function(){ document.body.innerHTML='<div style="font-family:sans-serif;direction:rtl;padding:30px;text-align:center">تم الإرسال. يمكنك إغلاق هذه النافذة.</div>'; try{ window.close(); }catch(e){} },800);
+  return true;
+}
 function init(){
   try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}
   idbOpen().then(function(db){ idb=db; return Promise.all([idbGet('kv','state'),idbAll('img')]); }).then(function(r){
     if(!r[0]){ try{ var lb=localStorage.getItem('av-mini-backup'); if(lb){ r[0]=JSON.parse(lb); } }catch(e){} }
     if(r[0]){ S=Object.assign(defaultState(),r[0]); S.settings=Object.assign(defaultState().settings,r[0].settings); delete S.settings.brandName; } IMG=r[1]||{};
-  }).catch(function(){ memoryOnly=true; }).then(function(){ bind(); render(); });
+  }).catch(function(){ memoryOnly=true; }).then(function(){ if(/[?&]bridge=1/.test(location.search)&&bridgeRespond()) return; bind(); render(); });
 }
 if(typeof document!=='undefined'){ init(); }
 if(typeof globalThis!=='undefined'){ globalThis.__AV__={S:function(){return S;},setS:function(x){S=x;},toMinor:toMinor,fmt:fmt,invoiceTotals:invoiceTotals,payStatus:payStatus,buildInvoice:buildInvoice,eligibleDesigns:eligibleDesigns,invInfo:invInfo,defaultState:defaultState,invoicedDesignIds:invoicedDesignIds,defaultPriceFor:defaultPriceFor}; }
